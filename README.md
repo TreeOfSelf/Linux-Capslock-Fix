@@ -1,6 +1,10 @@
 # Caps Lock Instant Toggle Fix
 
-Fixes Linux caps lock bug where ON=instant but OFF=only on release.
+Fixes Linux caps lock bug where ON=instant but OFF=only on release.   
+   
+### **Why not https://github.com/hexvalid/Linux-CapsLock-Delay-Fixer?**  
+Because- that repo has an annoying bug where if you press Capslock and a button with a modifier (like ".") it will act like a shift (and type something like ">").    
+As far as I know, this repo is the most "proper fix" to this annoying behavior at the moment, but if that changes I will link to a better one.
 
 ## Quick Install
 ```bash
