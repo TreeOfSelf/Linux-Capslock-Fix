@@ -8,9 +8,9 @@ As far as I know, this repo is the most "proper fix" to this annoying behavior a
 
 ## Quick Install
 ```bash
-curl -O https://raw.githubusercontent.com/TreeOfSelf/Linux-Capslock-Fix/main/install.sh
+curl -O https://raw.githubusercontent.com/TreeOfSelf/Linux-Capslock-Fix/main/install.py
 chmod +x install.sh
-sudo ./install.sh
+sudo python ./install.sh
 ```
 
 ## Manual Install
@@ -33,6 +33,7 @@ sudo pacman -S python-evdev
 ```
 
 ### 2. Create scripts
+#### 2.1 Keyboard Detection
 ```bash
 nano ./detect-kbd.py
 ```
@@ -43,11 +44,13 @@ sudo python ./detect-kbd.py
 ```
 Note the path returned.
 
+
+#### 2.2 Fix script
 ```bash
 sudo nano /usr/local/bin/capslock-fix.py
 ```
-
 Paste the code from `capslock-fix.py` and enter previously detected path into device_path
+
 ```bash
 sudo chmod +x /usr/local/bin/capslock-fix.py
 ```
