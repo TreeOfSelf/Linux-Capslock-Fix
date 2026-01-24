@@ -36,6 +36,10 @@ except ImportError:
 
 
 
+
+
+
+# Stop already running fix to prevent grabbing fixed virtual keyboard
 subprocess.run(["systemctl","stop","capslock-fix.service"])
 subprocess.run(["systemctl","disable","capslock-fix.service"])
 
