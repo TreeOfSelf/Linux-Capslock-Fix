@@ -81,9 +81,9 @@ try:
                         ui.write(event.type, event.code, event.value)
                         if event.type == e.EV_SYN:
                             ui.syn()
-                            
+
             except OSError as err:
-                if err.errno == 19: #keyboard unplugged, scan for new device until found
+                if err.errno == 19: #keyboard unplugged, scan for new until found
                     kbd = last_used_keyboard(keyboards)
                     while kbd is None:
                         devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
