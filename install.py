@@ -35,67 +35,10 @@ except ImportError:
         sys.exit(1)
 
 
-def last_used_keyboard(keyboards_list):
-    """
-    Find the last used keyboard from a list of keyboard devices.
-
-    Args:
-        keyboards_list: List of evdev.InputDevice
-
-    Return: 
-        last_used_keybaord: evdev.InputDevice. None if no keyboards are found.
-    """
-
-    if not keyboards_list:
-        return None
-
-    last_used_keyboard = None
-    last_event_time = 0.0
-
-    for keyboard in keyboards_list:
-        try:
-            # Get the last event time
-            fd = keyboard.fd
-            readable, _, _ = select.select([fd], [], [], 0.001) #Non-blocking select
-            if readable:
-                try:
-                    event = keyboard.read_one()
-                    current_time = event.sec + event.usec / 1000000.0
-                    if current_time > last_event_time:
-                        last_event_time = current_time
-                        last_used_keyboard = keyboard
-                except OSError:
-                    pass
-        except OSError:
-            pass
-
-        
-    return last_used_keyboard
-
-
-
 # Stop already running fix to prevent grabbing fixed virtual keyboard
 subprocess.run(["systemctl","stop","capslock-fix.service"])
 subprocess.run(["systemctl","disable","capslock-fix.service"])
 
-devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
-keyboards = [
-    d for d in devices
-    if e.EV_KEY in d.capabilities()
-    and e.KEY_CAPSLOCK in d.capabilities()[e.EV_KEY]
-    and e.KEY_A in d.capabilities()[e.EV_KEY]]
-
-if not keyboards:
-    print("No keyboards found")
-    sys.exit(1)
-
-
-print("Detecting keyboard...")
-
-kbd = last_used_keyboard(keyboards)
-while kbd is None:
-    kbd = last_used_keyboard(keyboards)
-kbd.grab()
 
 
 print("Creating script...")
@@ -107,13 +50,6 @@ from evdev import UInput, ecodes as e
 import select
 import sys
 
-devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
-keyboards = [
-    d for d in devices
-    if e.EV_KEY in d.capabilities()
-    and e.KEY_CAPSLOCK in d.capabilities()[e.EV_KEY]
-    and e.KEY_A in d.capabilities()[e.EV_KEY]
-]
 
 def last_used_keyboard(keyboards_list):
     if not keyboards_list:
@@ -142,11 +78,20 @@ def last_used_keyboard(keyboards_list):
         
     return last_used_keyboard
 
+def get_keyboards():
+    devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
+    keyboards = [
+        d for d in devices
+        if e.EV_KEY in d.capabilities()
+        and e.KEY_CAPSLOCK in d.capabilities()[e.EV_KEY]
+        and e.KEY_A in d.capabilities()[e.EV_KEY]
+    ]
+    return keyboards
 
 
-kbd = last_used_keyboard(keyboards)
+kbd = last_used_keyboard(get_keyboards())
 while kbd is None:
-    kbd = last_used_keyboard(keyboards)
+    kbd = last_used_keyboard(get_keyboards())
 kbd.grab()
 
 
@@ -177,16 +122,9 @@ try:
 
             except OSError as err:
                 if err.errno == 19: #keyboard unplugged, scan for new until found
-                    kbd = last_used_keyboard(keyboards)
+                    kbd = last_used_keyboard(get_keyboards())
                     while kbd is None:
-                        devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
-                        keyboards = [
-                            d for d in devices
-                            if e.EV_KEY in d.capabilities()
-                            and e.KEY_CAPSLOCK in d.capabilities()[e.EV_KEY]
-                            and e.KEY_A in d.capabilities()[e.EV_KEY]
-                        ]
-                        kbd = last_used_keyboard(keyboards)
+                        kbd = last_used_keyboard(get_keyboards())
                     kbd.grab()
                 else:
                     raise

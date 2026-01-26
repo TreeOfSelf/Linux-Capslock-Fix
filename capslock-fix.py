@@ -4,13 +4,6 @@ from evdev import UInput, ecodes as e
 import select
 import sys
 
-devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
-keyboards = [
-    d for d in devices
-    if e.EV_KEY in d.capabilities()
-    and e.KEY_CAPSLOCK in d.capabilities()[e.EV_KEY]
-    and e.KEY_A in d.capabilities()[e.EV_KEY]
-]
 
 def last_used_keyboard(keyboards_list):
     """
@@ -49,11 +42,27 @@ def last_used_keyboard(keyboards_list):
         
     return last_used_keyboard
 
+def get_keyboards():
+    """
+    Find and return keyboards
+
+    Return:
+        keyboards: evdev.InputDevice list of keyboards
+    
+    """
+    devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
+    keyboards = [
+        d for d in devices
+        if e.EV_KEY in d.capabilities()
+        and e.KEY_CAPSLOCK in d.capabilities()[e.EV_KEY]
+        and e.KEY_A in d.capabilities()[e.EV_KEY]
+    ]
+    return keyboards
 
 
-kbd = last_used_keyboard(keyboards)
+kbd = last_used_keyboard(get_keyboards())
 while kbd is None:
-    kbd = last_used_keyboard(keyboards)
+    kbd = last_used_keyboard(get_keyboards())
 kbd.grab()
 
 
@@ -84,16 +93,9 @@ try:
 
             except OSError as err:
                 if err.errno == 19: #keyboard unplugged, scan for new until found
-                    kbd = last_used_keyboard(keyboards)
+                    kbd = last_used_keyboard(get_keyboards())
                     while kbd is None:
-                        devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
-                        keyboards = [
-                            d for d in devices
-                            if e.EV_KEY in d.capabilities()
-                            and e.KEY_CAPSLOCK in d.capabilities()[e.EV_KEY]
-                            and e.KEY_A in d.capabilities()[e.EV_KEY]
-                        ]
-                        kbd = last_used_keyboard(keyboards)
+                        kbd = last_used_keyboard(get_keyboards())
                     kbd.grab()
                 else:
                     raise
