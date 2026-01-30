@@ -34,28 +34,11 @@ sudo dnf install python3-evdev
 sudo pacman -S python-evdev
 ```
 
-### 2. Create scripts
-#### 2.1 Keyboard Detection
-```bash
-nano ./detect-kbd.py
-```
-Paste the code from `detect-kbd.py`
-
-```bash
-sudo python ./detect-kbd.py
-```
-Note the path returned.
-
-
-#### 2.2 Fix script
+### 2. Create script
 ```bash
 sudo nano /usr/local/bin/capslock-fix.py
 ```
-Paste the code from `capslock-fix.py` and enter previously detected path into device_path
-
-```bash
-sudo chmod +x /usr/local/bin/capslock-fix.py
-```
+Paste the code from `capslock-fix.py`
 
 ### 3. Create service
 ```bash
