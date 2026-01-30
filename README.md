@@ -1,4 +1,4 @@
-# Caps Lock Instant Toggle Fix
+# Linux Caps Lock Fix
 
 Fixes Linux caps lock on Linux where `ON=on key down` but `OFF=on key release`.   
    
