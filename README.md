@@ -11,12 +11,6 @@ This script makes the toggle instant for both states.
 ## **Why not [Linux-CapsLock-Delay-Fixer](https://github.com/hexvalid/Linux-CapsLock-Delay-Fixer)?**  
 Because, that repo has an annoying bug where if you press Capslock and a button with a modifier (like ".") it will act like a shift (and type something like ">").
 
-## But this is how it is supposed to work!
-Yes, I have heard the argument before. Old typewriters used to have physical latches, the default behavior of Caps lock in Linux mimics this.   
-But it is not pleasant to type with, no other OS does this, and it interrupts the flow of typing (especially for people who rely on Caps lock for capitalizing)   
-Sometimes ergonomics and user-friendliness are preferred over being "historically correct".      
-We aren't here to debate, we just want our computers to work the way we want them to. 
-
 ## Quick Install
 ```bash
 curl -O https://raw.githubusercontent.com/TreeOfSelf/Linux-Capslock-Fix/main/install.py
@@ -94,6 +88,12 @@ sudo rm /etc/systemd/system/capslock-fix.service
 sudo rm /usr/local/bin/capslock-fix.py
 sudo systemctl daemon-reload
 ```
+
+## But this is how it is supposed to work!
+Yes, I have heard the argument before. Old typewriters used to have physical latches, the default behavior of Caps lock in Linux mimics this.   
+But it is not pleasant to type with, no other OS does this, and it interrupts the flow of typing (especially for people who rely on Caps lock for capitalizing)   
+Sometimes ergonomics and user-friendliness are preferred over being "historically correct".      
+We aren't here to debate, we just want our computers to work the way we want them to. 
 
 ## Special thanks
 [tzrtvevo](https://github.com/tzrtvevo) - for helping fix a bug and greatly improving the installation process 
