@@ -1,11 +1,12 @@
 # Caps Lock Instant Toggle Fix
 
-Fixes Linux caps lock bug where ON=instant but OFF=only on release.   
+Fixes Linux caps lock on Linux where `ON=key on down` but `OFF=only on release`.   
    
 ## **Why not [Linux-CapsLock-Delay-Fixer](https://github.com/hexvalid/Linux-CapsLock-Delay-Fixer)?**  
-Because- that repo has an annoying bug where if you press Capslock and a button with a modifier (like ".") it will act like a shift (and type something like ">").    
+Because- that repo has an annoying bug where if you press Capslock and a button with a modifier (like ".") it will act like a shift (and type something like ">").
+(The problem also isn't really a "delay" even though it feels like that)
 
-As far as I know, this repo is the most "proper fix" to this annoying behavior at the moment, but if that changes I will link to a better one.
+As far as I know, this repo is the most "proper fix" to this behavior at the moment, but if that changes I will link to a better one.
 
 ## Quick Install
 ```bash
@@ -95,7 +96,3 @@ Done. Runs on boot forever.
 
 ## Special thanks
 [tzrtvevo](https://github.com/tzrtvevo) - for helping fix a bug and greatly improving the installation process 
-
----
-
-<sub><sup>I don't care if it's how typewriters worked, we're not using typewriters. We have computers with millisecond input polling and people typing at 145+ WPM. The "press to lock, release to unlock" behavior is a HALF-CENTURY OLD mechanical limitation, not some sacred design principle. You know what else typewriters did? They jammed if you typed too fast. Should we add that feature too for "authenticity"? Every other modern OS figured this out decades ago- Windows, Mac, even BSD - they all toggle on PRESS because that's what makes sense for actual human typing patterns. When I hit Caps Lock, I want it to change STATE right then, not when I eventually get around to lifting my finger. This isn't about Mac vs Linux or "correct" behavior. It's about a kernel bug that breaks the expected behavior of a modifier key, and instead of fixing it, Linux maintainers are pointing at typewriters from before computers existed and saying "actually this is correct." It's ridiculous. The fact that we need arcane XKB hacks with undocumented Private() actions and mystery data values just to make a TOGGLE KEY work like every other toggle in computing is embarrassing. This is basic HID functionality that's been solved everywhere else.</sup></sub>
