@@ -1,15 +1,12 @@
 # Linux Caps Lock Fix
 
 ## The Problem
-By default, Linux distributions mimic old physical typewriters in the way Caps lock works:   
-* **ON:** Activates immediately when you press the key down.  
-* **OFF:** Activates only once you **release** the key.  
+By default, Linux distributions mimic old physical typewriters in the way Caps Lock works:
+* **ON:** Activates immediately when you press the key down.
+* **OFF:** Activates only once you **release** the key.
 
-This "delay" often leads to `HEllo` style typos where the first two letters of a word are capitalized because you haven't lifted your finger off the Caps Lock key fast enough.   
+This delay often leads to `HEllo` style typos because you have not lifted your finger off Caps Lock fast enough.
 This script makes the toggle instant for both states.
-
-## **Why not [Linux-CapsLock-Delay-Fixer](https://github.com/hexvalid/Linux-CapsLock-Delay-Fixer)?**  
-Because, that repo has an annoying bug where if you press Capslock and a button with a modifier (like ".") it will act like a shift (and type something like ">").
 
 ## Quick Install
 ```bash
@@ -17,6 +14,19 @@ curl -O https://raw.githubusercontent.com/TreeOfSelf/Linux-Capslock-Fix/main/ins
 chmod +x install.py
 sudo python3 ./install.py
 ```
+
+During install, it will ask you to press a key on the first keyboard you want to add.
+
+## Commands
+```bash
+sudo /usr/local/bin/capslock-fix.py add
+sudo /usr/local/bin/capslock-fix.py remove
+sudo /usr/local/bin/capslock-fix.py list
+sudo /usr/local/bin/capslock-fix-uninstall.py
+```
+
+Use `add` to add a keyboard, `remove` to remove one, and `list` to see what is currently added.  
+For `add` and `remove`, it will ask you to press a key on the keyboard you want.
 
 ## Manual Install
 
@@ -37,11 +47,12 @@ sudo dnf install python3-evdev
 sudo pacman -S python-evdev
 ```
 
-### 2. Create the script
+### 2. Install the scripts
 ```bash
-sudo nano /usr/local/bin/capslock-fix.py
+sudo cp capslock-fix.py /usr/local/bin/capslock-fix.py
+sudo cp uninstall.py /usr/local/bin/capslock-fix-uninstall.py
+sudo chmod +x /usr/local/bin/capslock-fix.py /usr/local/bin/capslock-fix-uninstall.py
 ```
-Paste the code from `capslock-fix.py`
 
 ### 3. Create service
 ```bash
@@ -52,11 +63,11 @@ Paste:
 ```ini
 [Unit]
 Description=Caps Lock Instant Toggle Fix
-After=systemd-user-sessions.service
+Before=display-manager.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /usr/local/bin/capslock-fix.py
+ExecStart=/usr/bin/python3 /usr/local/bin/capslock-fix.py run
 Restart=always
 RestartSec=2
 
@@ -64,36 +75,15 @@ RestartSec=2
 WantedBy=multi-user.target
 ```
 
-Save and exit.
-
-### 4. Enable service
+### 4. Reload and add a keyboard
 ```bash
 sudo systemctl daemon-reload
+sudo /usr/local/bin/capslock-fix.py add
 sudo systemctl enable capslock-fix.service
 sudo systemctl start capslock-fix.service
 ```
 
-## Check status
-```bash
-sudo systemctl status capslock-fix.service
-```
-
-Done. Runs on boot automatically.
-
 ## Uninstall
 ```bash
-sudo systemctl stop capslock-fix.service
-sudo systemctl disable capslock-fix.service
-sudo rm /etc/systemd/system/capslock-fix.service
-sudo rm /usr/local/bin/capslock-fix.py
-sudo systemctl daemon-reload
+sudo python3 ./uninstall.py
 ```
-
-## But this is how it is supposed to work!
-Yes, I have heard the argument before. Old typewriters used to have physical latches, the default behavior of Caps lock in Linux mimics this.   
-But it is not pleasant to type with, no other OS does this, and it interrupts the flow of typing (especially for people who rely on Caps lock for capitalizing)   
-Sometimes ergonomics and user-friendliness are preferred over being "historically correct".      
-We aren't here to debate, we just want our computers to work the way we want them to. 
-
-## Special thanks
-[tzrtvevo](https://github.com/tzrtvevo) - for helping fix a bug and greatly improving the installation process 

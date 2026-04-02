@@ -1,108 +1,439 @@
 #!/usr/bin/env python3
-import evdev
-from evdev import UInput, ecodes as e
+import argparse
+import json
+import os
 import select
+import subprocess
 import sys
+import time
+
+try:
+    import evdev
+    from evdev import UInput, ecodes as e
+except ImportError:
+    evdev = None
+    UInput = None
+    e = None
 
 
-def last_used_keyboard(keyboards_list):
-    """
-    Find the last used keyboard from a list of keyboard devices.
+CONFIG_PATH = "/etc/capslock-fix.json"
+SERVICE_NAME = "capslock-fix.service"
+VIRTUAL_DEVICE_NAME = "capslock-fixed"
+SCAN_INTERVAL = 0.5
 
-    Args:
-        keyboards_list: List of evdev.InputDevice
 
-    Return: 
-        last_used_keybaord: evdev.InputDevice. None if no keyboards are found.
-    """
+def require_root():
+    if os.geteuid() != 0:
+        print("Run as root: sudo python3 ./capslock-fix.py")
+        sys.exit(1)
 
-    if not keyboards_list:
-        return None
 
-    last_used_keyboard = None
-    last_event_time = 0.0
+def require_evdev():
+    if evdev is None or UInput is None or e is None:
+        print("Missing dependency: python3-evdev")
+        sys.exit(1)
 
-    for keyboard in keyboards_list:
+
+def is_keyboard(device):
+    try:
+        capabilities = device.capabilities()
+    except OSError:
+        return False
+
+    return (
+        device.name != VIRTUAL_DEVICE_NAME
+        and e.EV_KEY in capabilities
+        and e.KEY_CAPSLOCK in capabilities[e.EV_KEY]
+        and e.KEY_A in capabilities[e.EV_KEY]
+    )
+
+
+def list_keyboard_devices():
+    devices = []
+    for path in evdev.list_devices():
+        device = evdev.InputDevice(path)
+        if is_keyboard(device):
+            devices.append(device)
+        else:
+            device.close()
+    return devices
+
+
+def device_identity(device):
+    info = device.info
+    return {
+        "name": device.name or "",
+        "phys": device.phys or "",
+        "uniq": device.uniq or "",
+        "bustype": int(info.bustype),
+        "vendor": int(info.vendor),
+        "product": int(info.product),
+        "version": int(info.version),
+    }
+
+
+def identity_matches(identity, device):
+    current = device_identity(device)
+    return all(current[key] == identity.get(key, "") for key in current)
+
+
+def identity_label(identity):
+    vendor = f"{identity['vendor']:04x}"
+    product = f"{identity['product']:04x}"
+    phys = identity["phys"] or "-"
+    uniq = identity["uniq"] or "-"
+    return (
+        f"{identity['name']} "
+        f"[vendor:product={vendor}:{product}, phys={phys}, uniq={uniq}]"
+    )
+
+
+def load_config():
+    if not os.path.exists(CONFIG_PATH):
+        return {"keyboards": []}
+
+    with open(CONFIG_PATH, "r", encoding="utf-8") as handle:
+        data = json.load(handle)
+
+    keyboards = data.get("keyboards")
+    if not isinstance(keyboards, list):
+        return {"keyboards": []}
+    return {"keyboards": keyboards}
+
+
+def save_config(config):
+    parent = os.path.dirname(CONFIG_PATH)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+
+    with open(CONFIG_PATH, "w", encoding="utf-8") as handle:
+        json.dump(config, handle, indent=2)
+        handle.write("\n")
+
+
+def configured_keyboards():
+    return load_config()["keyboards"]
+
+
+def restart_service():
+    subprocess.run(["systemctl", "restart", SERVICE_NAME], check=False)
+
+
+def service_is_active():
+    result = subprocess.run(
+        ["systemctl", "is-active", "--quiet", SERVICE_NAME],
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def stop_service():
+    subprocess.run(["systemctl", "stop", SERVICE_NAME], check=False)
+
+
+def cleanup_devices(devices):
+    for device in devices:
         try:
-            # Get the last event time
-            fd = keyboard.fd
-            readable, _, _ = select.select([fd], [], [], 0.001) #Non-blocking select
-            if readable:
-                try:
-                    event = keyboard.read_one()
-                    current_time = event.sec + event.usec / 1000000.0
-                    if current_time > last_event_time:
-                        last_event_time = current_time
-                        last_used_keyboard = keyboard
-                except OSError:
-                    pass
+            device.close()
         except OSError:
             pass
 
-        
-    return last_used_keyboard
 
-def get_keyboards():
-    """
-    Find and return keyboards
+def select_keyboard(prompt, predicate):
+    announced_wait = False
 
-    Return:
-        keyboards: evdev.InputDevice list of keyboards
-    
-    """
-    devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
-    keyboards = [
-        d for d in devices
-        if e.EV_KEY in d.capabilities()
-        and e.KEY_CAPSLOCK in d.capabilities()[e.EV_KEY]
-        and e.KEY_A in d.capabilities()[e.EV_KEY]
-    ]
-    return keyboards
-
-
-kbd = last_used_keyboard(get_keyboards())
-while kbd is None:
-    kbd = last_used_keyboard(get_keyboards())
-kbd.grab()
-
-
-ui = UInput(
-    {
-        e.EV_KEY: kbd.capabilities()[e.EV_KEY],
-        e.EV_MSC: [e.MSC_SCAN],
-        e.EV_LED: [e.LED_NUML, e.LED_CAPSL, e.LED_SCROLLL],
-    },
-    name="capslock-fixed",
-)
-
-try:
     while True:
-            try:        
-                select.select([kbd.fd], [], [])
-                for event in kbd.read():
-                    if event.type == e.EV_KEY and event.code == e.KEY_CAPSLOCK:
-                        if event.value == 1:
-                            ui.write(e.EV_KEY, e.KEY_CAPSLOCK, 1)
-                            ui.syn()
-                            ui.write(e.EV_KEY, e.KEY_CAPSLOCK, 0)
-                            ui.syn()
+        devices = list_keyboard_devices()
+        candidates = [device for device in devices if predicate(device)]
+
+        if not candidates:
+            if not announced_wait:
+                print("No matching keyboards found. Waiting for one to appear...")
+                announced_wait = True
+            time.sleep(SCAN_INTERVAL)
+            cleanup_devices(devices)
+            continue
+
+        if announced_wait:
+            print("Matching keyboard detected.")
+            announced_wait = False
+
+        print(prompt)
+
+        fd_to_device = {device.fd: device for device in candidates}
+        try:
+            readable, _, _ = select.select(list(fd_to_device), [], [], 1)
+        except OSError:
+            cleanup_devices(devices)
+            time.sleep(SCAN_INTERVAL)
+            continue
+
+        if not readable:
+            cleanup_devices(devices)
+            continue
+
+        for fd in readable:
+            device = fd_to_device[fd]
+            try:
+                for event in device.read():
+                    if event.type == e.EV_KEY and event.value == 1:
+                        identity = device_identity(device)
+                        cleanup_devices(devices)
+                        return identity
+            except OSError:
+                pass
+
+        cleanup_devices(devices)
+
+
+def add_keyboard(no_restart=False):
+    require_root()
+    require_evdev()
+    config = load_config()
+
+    identity = select_keyboard(
+        "Press a key on the keyboard you want to add...",
+        lambda device: not any(
+            identity_matches(saved, device) for saved in config["keyboards"]
+        ),
+    )
+
+    if any(identity == saved for saved in config["keyboards"]):
+        print(f"Keyboard already configured: {identity_label(identity)}")
+        return 0
+
+    config["keyboards"].append(identity)
+    save_config(config)
+    print(f"Added keyboard: {identity_label(identity)}")
+
+    if not no_restart:
+        restart_service()
+    return 0
+
+
+def remove_keyboard(no_restart=False):
+    require_root()
+    require_evdev()
+    config = load_config()
+    if not config["keyboards"]:
+        print("No configured keyboards to remove.")
+        return 1
+
+    was_active = service_is_active()
+    if was_active:
+        stop_service()
+
+    try:
+        identity = select_keyboard(
+            "Press a key on the keyboard you want to remove...",
+            lambda device: any(
+                identity_matches(saved, device) for saved in config["keyboards"]
+            ),
+        )
+    except KeyboardInterrupt:
+        if was_active:
+            restart_service()
+        print("Remove cancelled.")
+        return 130
+    finally:
+        if was_active and no_restart:
+            restart_service()
+
+    new_keyboards = [saved for saved in config["keyboards"] if saved != identity]
+    if len(new_keyboards) == len(config["keyboards"]):
+        print(f"Keyboard was not configured: {identity_label(identity)}")
+        return 1
+
+    config["keyboards"] = new_keyboards
+    save_config(config)
+    print(f"Removed keyboard: {identity_label(identity)}")
+
+    if was_active and not no_restart:
+        restart_service()
+    return 0
+
+
+def list_configured_keyboards():
+    require_evdev()
+    config = load_config()
+    if not config["keyboards"]:
+        print("No keyboards configured.")
+        return 0
+
+    connected = list_keyboard_devices()
+    try:
+        for index, identity in enumerate(config["keyboards"], start=1):
+            is_connected = any(identity_matches(identity, dev) for dev in connected)
+            status = "connected" if is_connected else "missing"
+            print(f"{index}. {identity_label(identity)} [{status}]")
+    finally:
+        cleanup_devices(connected)
+
+    return 0
+
+
+def release_keyboard(path, active):
+    keyboard = active.pop(path, None)
+    if keyboard is None:
+        return
+
+    try:
+        keyboard.ungrab()
+    except OSError:
+        pass
+
+    try:
+        keyboard.close()
+    except OSError:
+        pass
+
+
+def grab_configured_keyboards(active, configured):
+    seen_paths = set()
+
+    for device in list_keyboard_devices():
+        seen_paths.add(device.path)
+
+        if not any(identity_matches(identity, device) for identity in configured):
+            device.close()
+            continue
+
+        if device.path in active:
+            device.close()
+            continue
+
+        try:
+            device.grab()
+            active[device.path] = device
+        except OSError:
+            device.close()
+
+    for path in list(active):
+        if path not in seen_paths:
+            release_keyboard(path, active)
+
+    return active
+
+
+def create_virtual_keyboard(source_keyboard):
+    capabilities = source_keyboard.capabilities()
+    return UInput(
+        {
+            e.EV_KEY: capabilities[e.EV_KEY],
+            e.EV_MSC: [e.MSC_SCAN],
+            e.EV_LED: [e.LED_NUML, e.LED_CAPSL, e.LED_SCROLLL],
+        },
+        name=VIRTUAL_DEVICE_NAME,
+    )
+
+
+def run_service():
+    require_evdev()
+    configured = configured_keyboards()
+    if not configured:
+        print("No configured keyboards. Run `capslock-fix.py add` first.")
+        return 1
+
+    active = {}
+    ui = None
+    last_scan = 0.0
+
+    try:
+        while not active:
+            grab_configured_keyboards(active, configured)
+            if not active:
+                time.sleep(SCAN_INTERVAL)
+
+        ui = create_virtual_keyboard(next(iter(active.values())))
+
+        while True:
+            now = time.monotonic()
+            if now - last_scan >= SCAN_INTERVAL:
+                grab_configured_keyboards(active, configured)
+                last_scan = now
+
+            if not active:
+                time.sleep(SCAN_INTERVAL)
+                continue
+
+            fd_to_path = {device.fd: path for path, device in active.items()}
+            try:
+                readable, _, _ = select.select(list(fd_to_path), [], [], SCAN_INTERVAL)
+            except OSError:
+                time.sleep(SCAN_INTERVAL)
+                continue
+
+            for fd in readable:
+                path = fd_to_path.get(fd)
+                keyboard = active.get(path) if path else None
+                if keyboard is None:
+                    continue
+
+                try:
+                    for event in keyboard.read():
+                        if event.type == e.EV_KEY and event.code == e.KEY_CAPSLOCK:
+                            if event.value == 1:
+                                ui.write(e.EV_KEY, e.KEY_CAPSLOCK, 1)
+                                ui.syn()
+                                ui.write(e.EV_KEY, e.KEY_CAPSLOCK, 0)
+                                ui.syn()
+                        else:
+                            ui.write(event.type, event.code, event.value)
+                            if event.type == e.EV_SYN:
+                                ui.syn()
+                except OSError as err:
+                    if err.errno == 19:
+                        release_keyboard(path, active)
                     else:
-                        ui.write(event.type, event.code, event.value)
-                        if event.type == e.EV_SYN:
-                            ui.syn()
+                        raise
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        for path in list(active):
+            release_keyboard(path, active)
+        if ui is not None:
+            ui.close()
 
-            except OSError as err:
-                if err.errno == 19: #keyboard unplugged, scan for new until found
-                    kbd = last_used_keyboard(get_keyboards())
-                    while kbd is None:
-                        kbd = last_used_keyboard(get_keyboards())
-                    kbd.grab()
-                else:
-                    raise
+    return 0
 
-except KeyboardInterrupt:
-    pass
 
-finally:
-    kbd.ungrab()
-    ui.close()
+def build_parser():
+    parser = argparse.ArgumentParser(
+        description="Caps Lock instant-toggle fix with managed keyboard selection."
+    )
+    subparsers = parser.add_subparsers(dest="command")
+
+    run_parser = subparsers.add_parser("run", help="Run the background keyboard service.")
+    run_parser.set_defaults(handler=lambda args: run_service())
+
+    add_parser = subparsers.add_parser("add", help="Add a keyboard by pressing a key on it.")
+    add_parser.add_argument("--no-restart", action="store_true", help=argparse.SUPPRESS)
+    add_parser.set_defaults(handler=lambda args: add_keyboard(no_restart=args.no_restart))
+
+    remove_parser = subparsers.add_parser(
+        "remove",
+        help="Remove a keyboard by pressing a key on it.",
+    )
+    remove_parser.add_argument("--no-restart", action="store_true", help=argparse.SUPPRESS)
+    remove_parser.set_defaults(
+        handler=lambda args: remove_keyboard(no_restart=args.no_restart)
+    )
+
+    list_parser = subparsers.add_parser("list", help="List configured keyboards.")
+    list_parser.set_defaults(handler=lambda args: list_configured_keyboards())
+
+    return parser
+
+
+def main():
+    parser = build_parser()
+    args = parser.parse_args()
+
+    if args.command is None:
+        return run_service()
+
+    return args.handler(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
