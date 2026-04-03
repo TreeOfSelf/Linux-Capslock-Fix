@@ -15,11 +15,15 @@ except ImportError:
     UInput = None
     e = None
 
+try:
+    import pyudev
+except ImportError:
+    pyudev = None
+
 
 CONFIG_PATH = "/etc/capslock-fix.json"
 SERVICE_NAME = "capslock-fix.service"
 VIRTUAL_DEVICE_NAME = "capslock-fixed"
-SCAN_INTERVAL = 0.5
 
 
 def require_root():
@@ -31,6 +35,12 @@ def require_root():
 def require_evdev():
     if evdev is None or UInput is None or e is None:
         print("Missing dependency: python3-evdev")
+        sys.exit(1)
+
+
+def require_pyudev():
+    if pyudev is None:
+        print("Missing dependency: python3-pyudev")
         sys.exit(1)
 
 
@@ -150,7 +160,7 @@ def select_keyboard(prompt, predicate):
             if not announced_wait:
                 print("No matching keyboards found. Waiting for one to appear...")
                 announced_wait = True
-            time.sleep(SCAN_INTERVAL)
+            time.sleep(0.5)
             cleanup_devices(devices)
             continue
 
@@ -165,7 +175,7 @@ def select_keyboard(prompt, predicate):
             readable, _, _ = select.select(list(fd_to_device), [], [], 1)
         except OSError:
             cleanup_devices(devices)
-            time.sleep(SCAN_INTERVAL)
+            time.sleep(0.5)
             continue
 
         if not readable:
@@ -289,6 +299,7 @@ def release_keyboard(path, active):
 
 
 def grab_configured_keyboards(active, configured):
+    changed = False
     seen_paths = set()
 
     for device in list_keyboard_devices():
@@ -305,14 +316,16 @@ def grab_configured_keyboards(active, configured):
         try:
             device.grab()
             active[device.path] = device
+            changed = True
         except OSError:
             device.close()
 
     for path in list(active):
         if path not in seen_paths:
             release_keyboard(path, active)
+            changed = True
 
-    return active
+    return changed
 
 
 def create_virtual_keyboard(source_keyboard):
@@ -327,8 +340,17 @@ def create_virtual_keyboard(source_keyboard):
     )
 
 
+def create_udev_monitor():
+    context = pyudev.Context()
+    monitor = pyudev.Monitor.from_netlink(context)
+    monitor.filter_by(subsystem="input")
+    monitor.start()
+    return monitor
+
+
 def run_service():
     require_evdev()
+    require_pyudev()
     configured = configured_keyboards()
     if not configured:
         print("No configured keyboards. Run `capslock-fix.py add` first.")
@@ -336,32 +358,30 @@ def run_service():
 
     active = {}
     ui = None
-    last_scan = 0.0
+    monitor = create_udev_monitor()
+    monitor_fd = monitor.fileno()
 
     try:
-        while not active:
-            grab_configured_keyboards(active, configured)
-            if not active:
-                time.sleep(SCAN_INTERVAL)
-
-        ui = create_virtual_keyboard(next(iter(active.values())))
+        grab_configured_keyboards(active, configured)
 
         while True:
-            now = time.monotonic()
-            if now - last_scan >= SCAN_INTERVAL:
-                grab_configured_keyboards(active, configured)
-                last_scan = now
-
-            if not active:
-                time.sleep(SCAN_INTERVAL)
-                continue
-
+            if ui is None and active:
+                ui = create_virtual_keyboard(next(iter(active.values())))
             fd_to_path = {device.fd: path for path, device in active.items()}
+
             try:
-                readable, _, _ = select.select(list(fd_to_path), [], [], SCAN_INTERVAL)
-            except OSError:
-                time.sleep(SCAN_INTERVAL)
+                readable, _, _ = select.select([monitor_fd, *fd_to_path], [], [])
+            except (OSError, ValueError):
+                grab_configured_keyboards(active, configured)
                 continue
+
+            if monitor_fd in readable:
+                while True:
+                    event = monitor.poll(timeout=0)
+                    if event is None:
+                        break
+                grab_configured_keyboards(active, configured)
+                readable = [fd for fd in readable if fd != monitor_fd]
 
             for fd in readable:
                 path = fd_to_path.get(fd)
