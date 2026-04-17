@@ -5,7 +5,7 @@ By default, Linux distributions mimic old physical typewriters in the way Caps L
 * **ON:** Activates immediately when you press the key down.
 * **OFF:** Activates only once you **release** the key.
 
-This delay often leads to `HEllo` style typos because you have not lifted your finger off Caps Lock fast enough.
+This delay often leads to `HEllo` style typos because you have not lifted your finger off Caps Lock before pressing the second key.
 This script makes the toggle instant for both states.
 
 ## Quick Install
