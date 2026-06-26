@@ -44,6 +44,9 @@ def require_pyudev():
         sys.exit(1)
 
 
+BUS_VIRTUAL = 6
+
+
 def is_keyboard(device):
     try:
         capabilities = device.capabilities()
@@ -52,6 +55,7 @@ def is_keyboard(device):
 
     return (
         device.name != VIRTUAL_DEVICE_NAME
+        and device.info.bustype != BUS_VIRTUAL
         and e.EV_KEY in capabilities
         and e.KEY_CAPSLOCK in capabilities[e.EV_KEY]
         and e.KEY_A in capabilities[e.EV_KEY]
