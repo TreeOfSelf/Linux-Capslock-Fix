@@ -87,3 +87,39 @@ sudo systemctl start capslock-fix.service
 ```bash
 sudo python3 ./uninstall.py
 ```
+
+## Non-Hacky Fix
+The root cause lives in X11 itself. If this script isn't working for you, or you'd rather build a distro without the bug at all, patch xorg-server with the following:
+
+```diff
+--- a/xkb/xkbActions.c
++++ b/xkb/xkbActions.c
+@@ -373,15 +373,21 @@
+         filter->priv = xkbi->state.locked_mods & pAction->mods.mask;
+         filter->filter = _XkbFilterLockState;
+         filter->upAction = *pAction;
+-        if (!(filter->upAction.mods.flags & XkbSA_LockNoLock))
+-            xkbi->state.locked_mods |= pAction->mods.mask;
+-        xkbi->setMods = pAction->mods.mask;
++        if (pAction->mods.mask == LockMask && filter->priv) {
++            xkbi->state.locked_mods &= ~pAction->mods.mask;
++        } else {
++            if (!(filter->upAction.mods.flags & XkbSA_LockNoLock))
++                xkbi->state.locked_mods |= pAction->mods.mask;
++            xkbi->setMods = pAction->mods.mask;
++        }
+     }
+     else if (filter->keycode == keycode) {
+         filter->active = 0;
+-        xkbi->clearMods = filter->upAction.mods.mask;
+-        if (!(filter->upAction.mods.flags & XkbSA_LockNoUnlock))
+-            xkbi->state.locked_mods &= ~filter->priv;
++        if (!(filter->upAction.mods.mask == LockMask && filter->priv)) {
++            xkbi->clearMods = filter->upAction.mods.mask;
++            if (!(filter->upAction.mods.flags & XkbSA_LockNoUnlock))
++                xkbi->state.locked_mods &= ~filter->priv;
++        }
+     }
+     return 1;
+ }
+```
